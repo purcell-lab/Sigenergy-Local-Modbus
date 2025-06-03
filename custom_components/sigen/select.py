@@ -42,6 +42,7 @@ GRID_CODE_MAP = {
     11: "Sweden",
     12: "Finland",
     13: "Denmark",
+    19: "Australia",
     26: "Austria",
     36: "Ireland",
     # Add more mappings as they are discovered
@@ -64,7 +65,6 @@ def _get_grid_code_display(data, device_name): # Changed inverter_id to device_n
     try:
         grid_code_int = int(grid_code)
         # _LOGGER.debug("Converted grid code to int: %s", grid_code_int)
-        
         # Look up in map
         result = GRID_CODE_MAP.get(grid_code_int)
         # _LOGGER.debug("Grid code map lookup result: %s", result)
