@@ -16,9 +16,11 @@ from pymodbus.exceptions import ConnectionException, ModbusException
 from pymodbus.payload import BinaryPayloadBuilder
 from pymodbus.client.mixin import ModbusClientMixin
 
+#### RBS - added CONF_DC_CHARGER_CONNECTIONS
 from .const import (
     CONF_INVERTER_CONNECTIONS,
     CONF_AC_CHARGER_CONNECTIONS,
+    CONF_DC_CHARGER_CONNECTIONS,
     CONF_PLANT_ID,
     CONF_SLAVE_ID,
     CONF_HOST,
@@ -111,6 +113,19 @@ class SigenergyModbusHub:
         _LOGGER.debug("AC Charger connections: %s", self.ac_charger_connections)
         self.ac_charger_count = len(self.ac_charger_connections)
 
+        ##### RBS vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+        #get DC charger connections
+        #_LOGGER.debug("RBS-modbus.py-118, get DC charger connections, config_entry.data: %s", config_entry.data)
+        self.dc_charger_connections = config_entry.data.get(CONF_DC_CHARGER_CONNECTIONS, {})
+        #_LOGGER.debug("RBS-modbus.py-120, get DC charger connections: %s", self.dc_charger_connections)
+        self.dc_charger_count = len(self.dc_charger_connections)
+        #_LOGGER.debug("RBS-modbus.py-122, get DC charger count: %s", self.dc_charger_count)
+        _LOGGER.debug("DC Charger connections: %s", self.inverter_connections)
+        ##### RBS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+
+
+
         # Other slave IDs and their connection details
 
         # Initialize register support status
@@ -195,8 +210,8 @@ class SigenergyModbusHub:
         if register_def.data_type == DataType.STRING:
             _LOGGER.debug(
                 "Register validation failed for address %s: string type "
-                "(not all string registers have to be filled)",
-                register_def.address
+                "(not all string registers have to be filled) [ %s ]",
+                register_def.address, register_def.description
             )
             return not all(reg == 0 for reg in registers)
 
@@ -887,6 +902,61 @@ class SigenergyModbusHub:
             registers_to_read=registers_to_read
         )
 
+                ### RBS - include DC Charger vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+                
+    async def async_read_dc_charger_data(self, dc_charger_name: str, update_frequency:
+                                          UpdateFrequencyType=UpdateFrequencyType.LOW
+                                          ) -> Dict[str, Any]:
+        """Read all supported DC charger data."""
+        # Look up DC charger details by name
+        #S_LOGGER.debug("RBS-modbus.py-935-Look up DC charger details by name, dc_charger_name: %s", dc_charger_name)
+        if dc_charger_name not in self.dc_charger_connections:
+            _LOGGER.debug("RBS-modbus.py-937-Unknown DC charger name provided for reading data: %s", dc_charger_name)
+            return {}  # Return empty dict if DC charger name is not found
+
+        dc_charger_info = self.dc_charger_connections[dc_charger_name]
+
+        # Probe registers if not done yet for this DC charger
+        if dc_charger_name not in self.dc_charger_registers_probed:
+            try:
+                await self.async_probe_registers(dc_charger_info, DC_CHARGER_RUNNING_INFO_REGISTERS)
+                # Also probe parameter registers that can be read
+                await self.async_probe_registers(dc_charger_info, {
+                    name: reg for name, reg in DC_CHARGER_PARAMETER_REGISTERS.items()
+                    if reg.register_type != RegisterType.WRITE_ONLY
+                })
+                self.dc_charger_registers_probed.add(dc_charger_name)
+            except Exception as ex:
+                _LOGGER.debug("RBS-modbus.py-953-Failed to probe DC charger '%s' registers: %s", dc_charger_name, ex)
+                # Continue with reading, some registers might still work
+
+        # Read registers from both running info and parameter registers
+        registers_to_read = {}
+        registers_to_read = {
+            **{name: reg for name, reg in DC_CHARGER_RUNNING_INFO_REGISTERS.items()
+               if reg.register_type != RegisterType.WRITE_ONLY and
+               reg.update_frequency >= update_frequency},
+            **{name: reg for name, reg in DC_CHARGER_PARAMETER_REGISTERS.items()
+               if reg.register_type != RegisterType.WRITE_ONLY and
+               reg.update_frequency >= update_frequency}
+        }
+        #_LOGGER.debug("RBS-modbus.py-966-Registers, Inverter registers_to_read: %s", registers_to_read)
+        #_LOGGER.debug("RBS-modbus.py-966-Reading %s DC charger registers. update_frequency is %s",
+        #              len(registers_to_read), update_frequency)
+
+        # Use the core reading logic
+        #_LOGGER.debug("RBS-modbus.py-971-Use the core reading logic, dc_charger_info: %s", dc_charger_info)
+        #_LOGGER.debug("RBS-modbus.py-971-Use the core reading logic, dc_charger_info: %s", dc_charger_name)
+        #_LOGGER.debug("RBS-modbus.py-971-Use the core reading logic, registers_to_read: %s", registers_to_read)
+    
+        return await self._async_read_device_data_core(
+            device_info=dc_charger_info,
+            device_name=dc_charger_name,
+            device_type_log_prefix="DC charger",
+            registers_to_read=registers_to_read
+        )
+
+----
     async def async_write_parameter(
         self,
         device_type: str,
@@ -930,6 +1000,21 @@ class SigenergyModbusHub:
                 raise ValueError("device_identifier is required for device_type 'ac_charger'")
             connection_dict = self.ac_charger_connections
             parameter_registers = AC_CHARGER_PARAMETER_REGISTERS
+
+            #### RBS vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+        elif device_type == "dc_charger":
+            if not device_identifier:
+                raise ValueError("device_identifier is required for device_type 'dc_charger'")
+            
+            _LOGGER.debug("RBS-modbus.py-1036- self.dc_charger_connections: %s", self.dc_charger_connections)
+            
+            connection_dict = self.dc_charger_connections
+
+            parameter_registers = DC_CHARGER_PARAMETER_REGISTERS
+            _LOGGER.debug("RBS-modbus.py-1041- parameter_registers: %s", parameter_registers)
+            _LOGGER.debug("RBS-modbus.py-1042- connection_dict: %s", connection_dict)
+
+            #### RBS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
         else:
             raise ValueError(f"Unknown device_type: {device_type}")
 
@@ -974,6 +1059,8 @@ class SigenergyModbusHub:
 
         # Get register definition
         if register_name not in parameter_registers:
+            _LOGGER.debug("RBS-modbus.py-1092- get register definition (%s) not in parameter_registers (%s)", register_name, parameter_registers)
+            _LOGGER.debug("RBS-modbus.py-1093- get register definition, DC_CHARGER_PARAMETER_REGISTERS (%s)", DC_CHARGER_PARAMETER_REGISTERS)
             raise SigenergyModbusError(f"Unknown {device_type} parameter: {register_name}")
         register_def = parameter_registers[register_name]
 
