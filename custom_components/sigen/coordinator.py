@@ -100,6 +100,15 @@ class SigenergyDataUpdateCoordinator(DataUpdateCoordinator):
                     # Fetch AC charger data with the determined frequency
                     ac_charger_data[ac_charger_name] = await self.hub.async_read_ac_charger_data(ac_charger_name, update_frequency=current_frequency_type)
 
+                ### RBS - include DC Charger vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+                # Fetch DC charger data for each DC charger
+                dc_charger_data = {}
+                for dc_charger_name in self.hub.dc_charger_connections.keys():
+                    # Fetch DC charger data with the determined frequency
+                    dc_charger_data[dc_charger_name] = await self.hub.async_read_dc_charger_data(dc_charger_name, update_frequency=current_frequency_type)
+                    #_LOGGER.debug("RBS-coordinator.py-112- Fetch DC Charger data, dc_charger_data[dc_charger_name] : %s", dc_charger_data[dc_charger_name])
+                ### RBS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
                 # --- Merge fetched data into existing coordinator data ---
                 if self.data is None:
                     # First successful run, initialize self.data
@@ -108,7 +117,9 @@ class SigenergyDataUpdateCoordinator(DataUpdateCoordinator):
                         "plant": plant_data,
                         "inverters": inverter_data,
                         "ac_chargers": ac_charger_data,
+                        "dc_chargers": dc_charger_data,      ### RBS  <<<<<<<<<<
                     }
+                    _LOGGER.debug("RBS-coordinator.py-125- First successful run, self.data : %s", self.data)
                 else:
                     # Merge new data into the existing self.data structure
                     self.data["plant"].update(plant_data)
@@ -118,6 +129,7 @@ class SigenergyDataUpdateCoordinator(DataUpdateCoordinator):
                         self.data["inverters"] = {}
                     for inverter_name, inv_data in inverter_data.items():
                         if inverter_name not in self.data["inverters"]:
+                            #_LOGGER.debug("RBS-coordinator.py-135- update inverter data, inverter_name: %s, inv_data: %s", inverter_name, inv_data)
                             self.data["inverters"][inverter_name] = {}
                         self.data["inverters"][inverter_name].update(inv_data)
 
@@ -127,6 +139,17 @@ class SigenergyDataUpdateCoordinator(DataUpdateCoordinator):
                         if charger_name not in self.data["ac_chargers"]:
                             self.data["ac_chargers"][charger_name] = {}
                         self.data["ac_chargers"][charger_name].update(chg_data)
+
+                    ### RBS - include DC Charger vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+                    #_LOGGER.debug("RBS-coordinator.py-147- 'is dc_chargers in self.data, self.data: %s", self.data)
+                    if "dc_chargers" not in self.data:
+                        self.data["dc_chargers"] = {}
+                    for charger_name, chg_data in dc_charger_data.items():
+                        if charger_name not in self.data["dc_chargers"]:
+                            #_LOGGER.debug("RBS-coordinator.py-152- update dc_chargers data, charger_name: %s, chg_data: %s", charger_name, chg_data)
+                            self.data["dc_chargers"][charger_name] = {}
+                        self.data["dc_chargers"][charger_name].update(chg_data)
+                    ### RBS ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
                 # --- End Merge ---
 
                 timetaken = (dt_util.utcnow() - start_time).total_seconds()
@@ -161,6 +184,7 @@ class SigenergyDataUpdateCoordinator(DataUpdateCoordinator):
     ) -> None:
         """Write a parameter via the Modbus hub and schedule a low-frequency update."""
         try:
+            _LOGGER.debug("RBS-coordinator.py-190- Write a parameter via the Modbus hub,  device_type: %s,  device_identifier: %s,  register_name: %s,  value: %s", device_type, device_identifier, register_name, value)
             await self.hub.async_write_parameter(
                 device_type=device_type,
                 device_identifier=device_identifier,
