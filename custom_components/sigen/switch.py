@@ -116,9 +116,21 @@ DC_CHARGER_SWITCHES = [
         icon="mdi:ev-station",
         # consider changing is_on_fn to check for dc_charger_output_power > 0 if the below doesn't work
         # identifier here is dc_charger_id (but it's accessing inverter data?) - This seems wrong, needs review based on coordinator data structure
-        is_on_fn=lambda data, identifier: data["inverters"].get(identifier, {}).get("dc_charger_start_stop") == 0, # TODO: Review this logic - should likely use dc_charger data
-        turn_on_fn=lambda coordinator, identifier: coordinator.async_write_parameter("inverter", identifier, "dc_charger_start_stop", 0), # TODO: Review this logic - Assuming DC charger controlled via inverter.
-        turn_off_fn=lambda coordinator, identifier: coordinator.async_write_parameter("inverter", identifier, "dc_charger_start_stop", 1), # TODO: Review this logic - Assuming DC charger controlled via inverter.
+        # Turning authorisation (ie rfid card/app) off, tells the charger to start charging as soon as its plugged in.
+        # charger does a insulation check upon startup. this takes 45-60 seconds. Is there a way to tell if this is running????
+        #is_on_fn=lambda data, identifier: data["inverters"].get(identifier, {}).get("dc_charger_start_stop") == 0, # TODO: Review this logic - should likely use dc_charger data
+        #is_on_fn=lambda data, identifier: data["dc_charger"].get(identifier, {}).get("dc_charger_start_stop") == 0, # TODO: Review this logic - should likely use dc_charger data - RBS
+        #is_on_fn=lambda data, identifier: data["dc_chargers"].get(identifier, {}).get("dc_charger_start_stop") == 0, # TODO: RBS - dc_charger_start_stop is write only. Therefore no read of value.
+        is_on_fn=lambda data, identifier: data["dc_chargers"].get(identifier, {}).get("dc_charger_charging_current") > 0, # TODO: - RBS - dc_charger_charging_current takes 45-60 seconds to kick into gear. may be a better way
+        #is_on_fn=lambda data, identifier: data["dc_chargers"].get(identifier, {}).get("dc_charger_current_charging_duration") > 0, # TODO: - RBS - dc_charger_current_charging_duration, updates to 1 second straight up, but does not reset to zero when finished. 
+
+        #is_on_fn=lambda data, identifier: data["dc_chargers"].get(identifier, {}).get("dc_charger_system_state") not in ("Initializing", "Fault", "Error", "Not Connected"),
+
+        #turn_on_fn=lambda coordinator, identifier: coordinator.async_write_parameter("inverter", identifier, "dc_charger_start_stop", 0), # RBS TODO: Review this logic - Assuming DC charger controlled via inverter.
+        turn_on_fn=lambda coordinator, identifier: coordinator.async_write_parameter("dc_charger", identifier, "dc_charger_start_stop", 0), # RBS TODO: Review this logic - Assuming DC charger controlled via inverter.
+        #turn_off_fn=lambda coordinator, identifier: coordinator.async_write_parameter("inverter", identifier, "dc_charger_start_stop", 1), # RBS TODO: Review this logic - Assuming DC charger controlled via inverter.
+        turn_off_fn=lambda coordinator, identifier: coordinator.async_write_parameter("dc_charger", identifier, "dc_charger_start_stop", 1), # RBS TODO: Review this logic - Assuming DC charger controlled via inverter.
+        
     ),
 ]
 
