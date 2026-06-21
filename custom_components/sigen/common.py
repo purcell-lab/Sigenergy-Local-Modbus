@@ -250,16 +250,37 @@ class SigenergySensorEntityDescription(SensorEntityDescription):
             )
         return result
 
+# Sentinel string states HA exposes when a source entity is offline or
+# its value is not yet known. These are legitimate "no value" markers,
+# not conversion errors, so we short-circuit before the warning fires.
+_UNAVAILABLE_STATES = frozenset({"unavailable", "unknown", "none", ""})
+
+
 def safe_float(value: Any, precision: int = 6) -> Optional[float]:
-    """Convert to float only if possible, else None."""
+    """Convert to float only if possible, else None.
+
+    Returns None silently for None / 'unavailable' / 'unknown' / 'none' /
+    empty string — these are HA's standard 'no value' markers and don't
+    warrant a warning. Logs at WARNING only for genuinely malformed input.
+    """
+    if value is None or (isinstance(value, str) and value.strip().lower() in _UNAVAILABLE_STATES):
+        return None
     try:
         return round(float(str(value)), precision)
     except (InvalidOperation, TypeError, ValueError):
         _LOGGER.warning("Could not convert value %s (type %s) to float", value, type(value).__name__)
         return None
-    
+
+
 def safe_decimal(value: Any) -> Optional[Decimal]:
-    """Convert to Decimal only if possible, else None."""
+    """Convert to Decimal only if possible, else None.
+
+    Returns None silently for None / 'unavailable' / 'unknown' / 'none' /
+    empty string — these are HA's standard 'no value' markers and don't
+    warrant a warning. Logs at WARNING only for genuinely malformed input.
+    """
+    if value is None or (isinstance(value, str) and value.strip().lower() in _UNAVAILABLE_STATES):
+        return None
     try:
         return Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
